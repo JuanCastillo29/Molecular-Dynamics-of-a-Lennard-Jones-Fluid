@@ -13,7 +13,8 @@ unsigned char ind_ran,ig1,ig2,ig3;
 #define NormRANu (2.3283063671E-10F)
 #define Pi 3.14159265
 
-#define TTimeStep 10000000
+#define TTot 10000000
+#define Termostato 10
 #define dt 0.00001
 #define TTermalizacion 100000
 #define NPart 125
@@ -89,6 +90,23 @@ else
     printf("No se ha podido crear el fichero: %s", filename);
 }
 
+int InicializarFicheroTermodinamica(char *filename){
+    FILE *f = fopen(filename, "w");
+    if(f!=NULL){
+        fprintf(f, "Numero de particulas: %d. \n", NPart);
+        fprintf(f, "Densidad del sistema: %lf. \n", densi);
+        fprintf(f, "Tiempo de termalizacion: %d.\n", TTermalizacion);
+        fprintf(f, "Tiempo total de simulacion (en equilibrio): %d.\n", TTot);
+        fprintf(f, "Tiempo\t E. Cinetica \t E. Potencial \t Temperatura \t Presion \n");
+        fclose(f);
+        return 1;
+    }
+    else{
+        printf("No se pudo abrir el fichero: %s.\n", filename);
+        return 0;
+    }
+}
+
 double distancia(double x, double y, double z){
     return x*x+y*y+z*z;
 }
@@ -145,8 +163,6 @@ for(int i=0; i<NPart; i++){
 }
 }
 
-
-
 double Kinetic(double (&v)[NPart][3]){
 double K = 0;
 for(int i=0; i<NPart; i++){
@@ -154,14 +170,6 @@ for(int i=0; i<NPart; i++){
         K=K+0.5*v[i][j]*v[i][j];
 }
 return K;
-}
-
-void CopyArray(double Conservar[NPart][3], double Borrar[NPart][3]){
-    for(int i=0; i<NPart; i++){
-        for(int j=0; j<3; j++){
-            Borrar[i][j] = Conservar[i][j];
-        }
-    }
 }
 
 void VVS(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], double L){
@@ -194,39 +202,9 @@ for(int i=0; i<NPart; i++){
 }
 }
 
-void VerletVel(double (&r)[NPart][3], double (&v)[NPart][3], double L){
-FILE *fkin=fopen("Thermodynamics.txt", "wt");
-if(fkin!=NULL ){
-    double K, P, F[NPart][3], G;
-    Fuerza(F, r, L);
-    G=3;
-    for(int i=0; i<TTimeStep; i++){
-        GuardarConfi(r, i);
-        K=Kinetic(v);
-        P=EnergiaPBC(r,L);
-        fprintf(fkin, "%lf\t%lf\t%lf\t%lf\n", i*dt,K, P, 2*K/(3*NPart-3));
-        VVS(r, v, F, L);
-        //Bath(v, G);
-    }
-    fclose(fkin);
-}
 
-else{
-    printf("Remember that you have to create a directory called VerletVel.\n");
-}
-}
 
-void Termalizacion(double (&r)[NPart][3], double (&v)[NPart][3], double L){
-double F[NPart][3], G=100;
-Fuerza(F, r, L);
-for(int i=0; i<TTermalizacion; i++){
-    VVS(r, v, F, L);
-    Bath(v, G);
-}
-GuardarConfi(r, 0);
-}
-
-void InicializarSistema( double (&v)[NPart][3]){
+void InicializarSistema(double (&r)[NPart][3], double (&v)[NPart][3], double L){
     double vmod = 10;
     for(int i=0; i< NPart; i++){
         if(Random()<0.5)
@@ -237,15 +215,14 @@ void InicializarSistema( double (&v)[NPart][3]){
     }
 }
 
-void guardarvel(char (&filename)[50],double (&v)[NPart][3]){
-FILE *f = fopen(filename, "wt");
-if(f!=NULL){
-    for(int i=0; i< NPart;i++){
-        for(int j=0; j< 3; j++)
-            fprintf(f, "%lf\n", v[i][j]);
-    }
+void Termalizacion(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], double L, double T){
+for(int i=0; i<TTermalizacion; i++){
+    VVS(r, v, F, L);
+    Bath(v, T);
 }
 }
+
+
 
 double Presion(double (&r)[NPart][3], double (&F)[NPart][3], double T){
 double P = 0;
@@ -257,55 +234,29 @@ for(int i=0; i< NPart; i++){
 return P*1.0/3 + densi*T;
 }
 
-void Cinetica(char *filename, int i, const double (&v)[NPart][3], const double E){
-char mode[10];
-if(i==0)
-    sprintf(mode, "wt");
-else
-    sprintf(mode, "at");
-
-FILE *f = fopen(filename, mode);
-if( f!=NULL){
-    double P[3] = {0, 0 , 0};
-    for(int n=0; n<NPart; n++){
-        for(int j=0; j<3; j++){
-            P[j] += v[n][j];
-        }
-    }
-    fprintf(f, "%lf\t %lf \t %lf \t %lf \t %lf\n", i*dt, P[0], P[1], P[2], E);
-    fclose(f);
-}
-else
-    printf("No se pudo abrir el fichero %s", filename);
-}
-
 void Simulacion(char *filename){
     FILE *fkin=fopen(filename, "wt");
     if(fkin!=NULL ){
-        double K, P, T,F[NPart][3], G, r[NPart][3], v[NPart][3], L=IniBCC(r);
+        double K, T,F[NPart][3], G, r[NPart][3], v[NPart][3], L=IniBCC(r);
+
+        //Inicializo el valor de las fuerzas.
+        Fuerza(F, r, L);
 
         //Desordeno el sistema para crear una configuracion liquida.
-        InicializarSistema(r, v, L);
+        Termalizacion(r, v,F, L, 100);
 
         //Termalizo el sistema para llevarlo al equilibrio.
-        Termalizacion(r, v, L);
+        Termalizacion(r, v, F, L, Termostato);
 
-        Fuerza(F, r, L);
-        //G=3;
-        for(int i=0; i<TTimeStep; i++){
-            //GuardarConfi(r, i);
+        for(int i=0; i<TTot; i++){
             if(i%10000==0){
-                K=Kinetic(v);
-                P=EnergiaPBC(r,L);
+                K =  Kinetic(v);
                 T=2*K/(3*NPart-3);
-                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", i*dt,K, P, T, Presion(r, F, T) );
-                Cinetica(filename2, i, v, K+P);
+                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", i*dt, EnergiaPBC(r,L), T, Presion(r, F, T) );
             }
             VVS(r, v, F, L);
-            //Bath(v, G);
+            Bath(v, Termostato);
     }
-    sprintf(filename, "Verlet/dt=%lf/VelFinal.txt", dt);
-    guardarvel( filename, v);
     fclose(fkin);
 }
 
@@ -313,22 +264,6 @@ else
     printf("No se pudo abrir el fichero: %s.\n", filename);
 }
 
-int InicializarFicheroTermodinamica(char filename){
-    FILE *f = fopen(filename, "w");
-    if(f!=NULL){
-        fprintf(f, "Numero de particulas: %d. \n", NPart);
-        fprintf(f, "Densidad del sistema: %lf. \n", densi);
-        fprintf(f, "Tiempo de termalizacion: %d.\n", TTermalizacion);
-        fprintf(f, "Tiempo total de simulacion (en equilibrio): %d.\n", TTot);
-        fprintf(f, "Tiempo\t E. Cinetica \t E. Potencial \t Temperatura \t Presion \n");
-        fclose(f);
-        return 1;
-    }
-    else{
-        printf("No se pudo abrir el fichero: %s.\n", filename);
-        return 0;
-    }
-}
 
 int main(){
     ini_ran(time(NULL));

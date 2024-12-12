@@ -12,13 +12,27 @@ unsigned int ir1;
 unsigned char ind_ran,ig1,ig2,ig3;
 #define NormRANu (2.3283063671E-10F)
 #define Pi 3.14159265
+#define Gases 8.314462 //Constante de los gases en J/(K·mol)
+#define Avogradro 6.022140 //Constante de Avogradro.
 
-#define TTot 10000000
+#define TTot 100
 #define Termostato 10
-#define dt 0.00001
-#define TTermalizacion 100000
-#define NPart 125
-#define densi 0.8
+#define dt 0.001
+#define TTermalizacion 10
+#define NPart 128
+#define densi 0.4
+#define TMeasure 0.05
+
+int MedidasTotal = TTot/dt, Medida = TMeasure/dt, NTermalizacion = TTermalizacion/dt;
+
+#define m 40  //Masa en g/mol.
+#define e 0.998 //Energia en kJ/mol
+#define sigma 3.4   //Radio molecular en amstrongs.
+
+const double V = sigma*sigma*sigma; //Volumen en Amstrongs^3.
+const double t = sqrt(m/e)*sigma/10; //Tiempo en picosegundos
+const double Temp = 1000*e/Gases; //Temperatura en Kelvin
+const double Pres = 100000*e/Avogradro/V; // Presion en GPa
 
 //Generador de números de Parisi-Rapuano.
 void ini_ran(int SEMILLA)
@@ -95,9 +109,11 @@ int InicializarFicheroTermodinamica(char *filename){
     if(f!=NULL){
         fprintf(f, "Numero de particulas: %d. \n", NPart);
         fprintf(f, "Densidad del sistema: %lf. \n", densi);
-        fprintf(f, "Tiempo de termalizacion: %d.\n", TTermalizacion);
-        fprintf(f, "Tiempo total de simulacion (en equilibrio): %d.\n", TTot);
-        fprintf(f, "Tiempo\t E. Cinetica \t E. Potencial \t Temperatura \t Presion \n");
+        fprintf(f, "Temperatura del baño termico: %lf K. \n", Termostato*Temp);
+        fprintf(f, "Tiempo de termalizacion: %lf ps.\n", TTermalizacion*t);
+        fprintf(f, "Tiempo total de simulacion (en equilibrio): %lf ps.\n \n", TTot*t);
+
+        fprintf(f, "Tiempo [ps]\t E. Cinetica [kJ/mol]\t E. Potencial [kJ/mol]\t Temperatura [K]\t Presion [GPa]\n");
         fclose(f);
         return 1;
     }
@@ -216,7 +232,7 @@ void InicializarSistema(double (&r)[NPart][3], double (&v)[NPart][3], double L){
 }
 
 void Termalizacion(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], double L, double T){
-for(int i=0; i<TTermalizacion; i++){
+for(int i=0; i<NTermalizacion; i++){
     VVS(r, v, F, L);
     Bath(v, T);
 }
@@ -235,24 +251,23 @@ return P*1.0/3 + densi*T;
 }
 
 void Simulacion(char *filename){
-    FILE *fkin=fopen(filename, "wt");
+    FILE *fkin=fopen(filename, "a");
     if(fkin!=NULL ){
         double K, T,F[NPart][3], G, r[NPart][3], v[NPart][3], L=IniBCC(r);
-
         //Inicializo el valor de las fuerzas.
         Fuerza(F, r, L);
 
         //Desordeno el sistema para crear una configuracion liquida.
-        Termalizacion(r, v,F, L, 100);
+        Termalizacion(r, v,F, L, 1);
 
         //Termalizo el sistema para llevarlo al equilibrio.
         Termalizacion(r, v, F, L, Termostato);
 
-        for(int i=0; i<TTot; i++){
-            if(i%10000==0){
+        for(int i=0; i<MedidasTotal; i++){
+            if(i%Medida==0){
                 K =  Kinetic(v);
                 T=2*K/(3*NPart-3);
-                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", i*dt, EnergiaPBC(r,L), T, Presion(r, F, T) );
+                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e, e*EnergiaPBC(r,L), T*Temp, Pres*Presion(r, F, T) );
             }
             VVS(r, v, F, L);
             Bath(v, Termostato);

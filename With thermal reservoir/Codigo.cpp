@@ -19,7 +19,7 @@ unsigned char ind_ran,ig1,ig2,ig3;
 #define Termostato 10
 #define dt 0.001
 #define TTermalizacion 10
-#define NPart 16
+#define NPart 128
 #define densi 0.4
 #define TMeasure 0.05
 
@@ -82,7 +82,7 @@ if(x<-L/2)
 return x;
 }
 
-double IniBCC(double (&r)[NPart][3]){
+double IniBCC(double (&r)[NPart][3], double (&v)[NPart][3]){
     int N = int(pow((NPart/2)*1.0001, 1.0/3));
     double l = pow((NPart/2)/densi, 1.0/3), a = l/N;
     for(int i=0; i<NPart/2; i++){
@@ -92,6 +92,11 @@ double IniBCC(double (&r)[NPart][3]){
         for(int j=0; j<3; j++){
             r[i+NPart/2][j] = PBC(a*(r[i][j] + 0.5), l);
             r[i][j] = PBC(a*r[i][j], l);
+        }
+    }
+    for(int i = 0; i<NPart; i++){
+        for(int j=0; j<3; j++){
+            v[i][j]=0;
         }
     }
 return l;
@@ -252,27 +257,48 @@ for(int i=0; i< NPart; i++){
 return P*1.0/3 + densi*T;
 }
 
+int Flag(double (&r)[NPart][3], double L){
+    for(int n=0; n<NPart; n++){
+        for(int j=0; j<3; j++){
+            if(fabs(r[n][j])>L/2){
+                printf("Ha habido un error en la simulacion.\n");
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 void Simulacion(char *filename){
     FILE *fkin=fopen(filename, "a");
     if(fkin!=NULL ){
-        double K, T,F[NPart][3], G, r[NPart][3], v[NPart][3], L=IniBCC(r);
+        double K, T,F[NPart][3], G, r[NPart][3], v[NPart][3], L=IniBCC(r, v);
 
         //Inicializo el valor de las fuerzas.
         Fuerza(F, r, L);
 
         //Desordeno el sistema para crear una configuracion liquida.
+        printf("Desordenando el sistema...\n");
         Termalizacion(r, v,F, L, 100);
-        GuardarConfi(r, 1);
+
+        if(Flag(r, L))
+            return;
 
         //Termalizo el sistema para llevarlo al equilibrio.
+        printf("Sistema desordenado. Termalizando...\n");
         Termalizacion(r, v, F, L, Termostato);
-        GuardarConfi(r, 2);
 
+        if(Flag(r, L))
+            return;
+
+        printf("Sistema termalizando. Se va a proceder a la simulacion.\n");
         for(int i=0; i<MedidasTotal ; i++){
             if(i%Medida==0){
+                if(Flag(r, L))
+                    return;
                 K =  Kinetic(v);
                 T=2*K/(3*NPart-3);
-                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e, e*EnergiaPBC(r,L), T*Temp, Pres*Presion(r, F, T) );
+                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e/NPart, e*EnergiaPBC(r,L)/NPart, T*Temp, Pres*Presion(r, F, T) );
             }
             VVS(r, v, F, L);
 

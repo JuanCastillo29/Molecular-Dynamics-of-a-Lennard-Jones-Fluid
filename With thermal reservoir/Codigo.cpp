@@ -19,7 +19,7 @@ unsigned char ind_ran,ig1,ig2,ig3;
 #define Termostato 10
 #define dt 0.001
 #define TTermalizacion 10
-#define NPart 128
+#define NPart 16
 #define densi 0.4
 #define TMeasure 0.05
 
@@ -74,6 +74,14 @@ double DistrGauss(void){
     return -sqrt(-2*log(d1))*cos(2*Pi*d2);
 }
 
+double PBC(double x, double L){
+if(x>L/2)
+    x=x-L;
+if(x<-L/2)
+    x=x+L;
+return x;
+}
+
 double IniBCC(double (&r)[NPart][3]){
     int N = int(pow((NPart/2)*1.0001, 1.0/3));
     double l = pow((NPart/2)/densi, 1.0/3), a = l/N;
@@ -82,8 +90,8 @@ double IniBCC(double (&r)[NPart][3]){
         r[i][1]=(i%(N*N))/N;
         r[i][0] = (i)%N;
         for(int j=0; j<3; j++){
-            r[i+NPart/2][j] = a*(r[i][j] + 0.5);
-            r[i][j] = a*r[i][j];
+            r[i+NPart/2][j] = PBC(a*(r[i][j] + 0.5), l);
+            r[i][j] = PBC(a*r[i][j], l);
         }
     }
 return l;
@@ -127,16 +135,10 @@ double distancia(double x, double y, double z){
     return x*x+y*y+z*z;
 }
 
-double PBC(double x, double L){
-if(x>L/2)
-    x=x-L;
-if(x<-L/2)
-    x=x+L;
-return x;
-}
+
 
 double EnergiaPBC(double (&r)[NPart][3], double L){
-    double UPot=0, d, d6, d12, cutoff2 = L*L/4, cutoff6 = cutoff2*cutoff2*cutoff2, Uoff = -4.0*(1.0/(cutoff6) - 1.0/(cutoff6*cutoff6)), x, y, z;
+    double UPot=0, d, d6, d12, cutoff2 = 0.999*L*L/4, cutoff6 = cutoff2*cutoff2*cutoff2, Uoff = -4.0*(1.0/(cutoff6) - 1.0/(cutoff6*cutoff6)), x, y, z;
     for(int i=0;i<NPart; i++){
         for(int j=i+1; j <NPart; j++){
             x=PBC(r[j][0]-r[i][0], L);
@@ -154,7 +156,7 @@ double EnergiaPBC(double (&r)[NPart][3], double L){
 }
 
 void Fuerza(double (&F)[NPart][3],const double (&r)[NPart][3], double  L){
-double d2, d8, d14, R[3], cutoff2 = L*L*1.0/4, module;
+double d2, d8, d14, R[3], cutoff2 = 0.999*L*L*1.0/4, module;
 for(int i=0; i<NPart; i++){
     for(int j=0; j<3; j++){
         F[i][j]=0;
@@ -254,22 +256,26 @@ void Simulacion(char *filename){
     FILE *fkin=fopen(filename, "a");
     if(fkin!=NULL ){
         double K, T,F[NPart][3], G, r[NPart][3], v[NPart][3], L=IniBCC(r);
+
         //Inicializo el valor de las fuerzas.
         Fuerza(F, r, L);
 
         //Desordeno el sistema para crear una configuracion liquida.
-        Termalizacion(r, v,F, L, 1);
+        Termalizacion(r, v,F, L, 100);
+        GuardarConfi(r, 1);
 
         //Termalizo el sistema para llevarlo al equilibrio.
         Termalizacion(r, v, F, L, Termostato);
+        GuardarConfi(r, 2);
 
-        for(int i=0; i<MedidasTotal; i++){
+        for(int i=0; i<MedidasTotal ; i++){
             if(i%Medida==0){
                 K =  Kinetic(v);
                 T=2*K/(3*NPart-3);
                 fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e, e*EnergiaPBC(r,L), T*Temp, Pres*Presion(r, F, T) );
             }
             VVS(r, v, F, L);
+
             Bath(v, Termostato);
     }
     fclose(fkin);

@@ -15,15 +15,17 @@ unsigned char ind_ran,ig1,ig2,ig3;
 #define Gases 8.314462 //Constante de los gases en J/(K·mol)
 #define Avogradro 6.022140 //Constante de Avogradro.
 
-#define TTot 100
+#define NMedidas 131072
 #define Termostato 10
 #define dt 0.001
-#define TTermalizacion 10
+#define TTermalizacion 100
 #define NPart 128
 #define densi 0.4
 #define TMeasure 0.05
 
-int MedidasTotal = TTot/dt, Medida = TMeasure/dt, NTermalizacion = TTermalizacion/dt;
+double TTot = NMedidas*TMeasure;
+
+int MedidasTotal=TTot/dt, Medida = TMeasure/dt, NTermalizacion = TTermalizacion/dt;
 
 #define m 40  //Masa en g/mol.
 #define e 0.998 //Energia en kJ/mol
@@ -271,6 +273,7 @@ int Flag(double (&r)[NPart][3], double L){
 }
 
 void Simulacion(char *filename){
+
     FILE *fkin=fopen(filename, "a");
     if(fkin!=NULL ){
         double K, T,F[NPart][3], G, r[NPart][3], v[NPart][3], L=IniBCC(r, v);
@@ -286,23 +289,20 @@ void Simulacion(char *filename){
             return;
 
         //Termalizo el sistema para llevarlo al equilibrio.
-        printf("Sistema desordenado. Termalizando...\n");
+        printf("Sistema desordenado.\n Termalizando...\n");
         Termalizacion(r, v, F, L, Termostato);
 
         if(Flag(r, L))
             return;
 
-        printf("Sistema termalizado. Se va a proceder a la simulacion.\n");
+        printf("Sistema termalizado.\n Simulando...\n");
         for(int i=0; i<MedidasTotal ; i++){
             if(i%Medida==0){
-                if(Flag(r, L))
-                    return;
                 K =  Kinetic(v);
                 T=2*K/(3*NPart-3);
                 fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e/NPart, e*EnergiaPBC(r,L)/NPart, T*Temp, Pres*Presion(r, F, T, L) );
             }
             VVS(r, v, F, L);
-
             Bath(v, Termostato);
     }
     fclose(fkin);

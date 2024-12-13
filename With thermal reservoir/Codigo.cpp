@@ -33,6 +33,7 @@ const double V = sigma*sigma*sigma; //Volumen en Amstrongs^3.
 const double t = sqrt(m/e)*sigma/10; //Tiempo en picosegundos
 const double Temp = 1000*e/Gases; //Temperatura en Kelvin
 const double Pres = 100000*e/Avogradro/V; // Presion en GPa
+const double rho = m/Avogradro/V*10; //Densidad en g/cm^3.
 
 //Generador de números de Parisi-Rapuano.
 void ini_ran(int SEMILLA)
@@ -121,7 +122,7 @@ int InicializarFicheroTermodinamica(char *filename){
     FILE *f = fopen(filename, "w");
     if(f!=NULL){
         fprintf(f, "Numero de particulas: %d. \n", NPart);
-        fprintf(f, "Densidad del sistema: %lf. \n", densi);
+        fprintf(f, "Densidad del sistema: %lf. \n", rho*densi);
         fprintf(f, "Temperatura del baño termico: %lf K. \n", Termostato*Temp);
         fprintf(f, "Tiempo de termalizacion: %lf ps.\n", TTermalizacion*t);
         fprintf(f, "Tiempo total de simulacion (en equilibrio): %lf ps.\n \n", TTot*t);
@@ -218,7 +219,7 @@ void Bath(double (&v)[NPart][3], double G){
 int n=0;
 for(int i=0; i<NPart; i++){
     for(int j=0; j<3; j++){
-        if(Random()<0.1){
+        if(Random()<0.01){
             v[i][j] = sqrt(G)*DistrGauss();
         }
     }
@@ -247,14 +248,14 @@ for(int i=0; i<NTermalizacion; i++){
 
 
 
-double Presion(double (&r)[NPart][3], double (&F)[NPart][3], double T){
+double Presion(double (&r)[NPart][3], double (&F)[NPart][3], double T, double L){
 double P = 0;
 for(int i=0; i< NPart; i++){
     for(int j=0; j< 3; j++){
         P=P+r[i][j]*F[i][j];
     }
 }
-return P*1.0/3 + densi*T;
+return P*1.0/3/(L*L*L) + densi*T;
 }
 
 int Flag(double (&r)[NPart][3], double L){
@@ -291,14 +292,14 @@ void Simulacion(char *filename){
         if(Flag(r, L))
             return;
 
-        printf("Sistema termalizando. Se va a proceder a la simulacion.\n");
+        printf("Sistema termalizado. Se va a proceder a la simulacion.\n");
         for(int i=0; i<MedidasTotal ; i++){
             if(i%Medida==0){
                 if(Flag(r, L))
                     return;
                 K =  Kinetic(v);
                 T=2*K/(3*NPart-3);
-                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e/NPart, e*EnergiaPBC(r,L)/NPart, T*Temp, Pres*Presion(r, F, T) );
+                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e/NPart, e*EnergiaPBC(r,L)/NPart, T*Temp, Pres*Presion(r, F, T, L) );
             }
             VVS(r, v, F, L);
 

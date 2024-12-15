@@ -304,7 +304,20 @@ int Flag(double (&r)[NPart][3], double L){
     return 0;
 }
 
-void Simulacion(char *filename,char *filename2, double densi){
+void RadialDistribution(double (&r)[NPart][3], double L, char *filename){
+FILE *f = fopen(filename, "a");
+if(f!=NULL){
+    for(int i=0; i<NPart-1; i++){
+        for(int j=i+1; j<NPart; j++)
+            fprintf(f,"%lf\n", distancia(r[i][0]-r[j][0],r[i][1]-r[j][1], r[i][2]-r[j][2] ));
+    }
+    fclose(f);
+}
+else
+    printf("No se pudo abrir el fichero: %s", filename);
+}
+
+void Simulacion(char *filename,char *filename2, char *filename3, double densi){
 
     FILE *fkin=fopen(filename, "a");
     if(fkin!=NULL ){
@@ -335,6 +348,7 @@ void Simulacion(char *filename,char *filename2, double densi){
                 K =  Kinetic(v);
                 T=T0*K;
                 Difusion(NVueltas, r, filename2, i*dt, L);
+                RadialDistribution(r, L, filename3);
                 fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e/NPart, e*EnergiaPBC(r,L)/NPart, T*Temp, Pres*Presion(r, F, T, L, densi) );
             }
             VVS(r, v, F, L, NVueltas);
@@ -349,15 +363,16 @@ else
 
 int main(){
     ini_ran(time(NULL));
-    char filename[50], filename2[50];
+    char filename[50], filename2[50], filename3[50];
     double densi;
     for(int i=0; i<5; i++){
         densi = Densidad[i];
         sprintf(filename, "Thermodynamics/density = %lf.dat", densi);
-         sprintf(filename2, "Difusion/density = %lf.dat", densi);
+        sprintf(filename2, "Difusion/density = %lf.dat", densi);
+        sprintf(filename3,"Distribucion/density = %lf.dat", densi );
         if(InicializarFicheroTermodinamica(filename, densi)==0)
             return 0;
-        Simulacion(filename, filename2, densi);
+        Simulacion(filename, filename2, filename3, densi);
         printf("He terminado la simulacion con densidad %lf.\n", densi);
     }
     return 0;

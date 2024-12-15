@@ -123,7 +123,7 @@ int InicializarFicheroTermodinamica(char *filename, double densi){
     FILE *f = fopen(filename, "w");
     if(f!=NULL){
         fprintf(f, "Numero de particulas: %d. \n", NPart);
-        fprintf(f, "Densidad del sistema: %lf. \n", rho*densi);
+        fprintf(f, "Densidad del sistema: %lf g/cm^3. \n", rho*densi);
         fprintf(f, "Temperatura del baño termico: %lf K. \n", Termostato*Temp);
         fprintf(f, "Tiempo de termalizacion: %lf ps.\n", TTermalizacion*t);
         fprintf(f, "Tiempo total de simulacion (en equilibrio): %lf ps.\n \n", TTot*t);
@@ -212,6 +212,9 @@ void VVS(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], do
                     NVueltas[n][l]-=1;
                     r[n][l] = PBC(r[n][l] + v[n][l]*dt, L);
                 }
+                else
+                    r[n][l] = PBC(r[n][l] + v[n][l]*dt, L);
+
             }
         }
     }
@@ -230,7 +233,7 @@ void Bath(double (&v)[NPart][3], double G){
 int n=0;
 for(int i=0; i<NPart; i++){
     for(int j=0; j<3; j++){
-        if(Random()<0.01){
+        if(Random()<1){
             v[i][j] = sqrt(G)*DistrGauss();
         }
     }
@@ -329,7 +332,7 @@ void Simulacion(char *filename,char *filename2, char *filename3, double densi){
 
         //Desordeno el sistema para crear una configuracion liquida.
         printf("Desordenando el sistema...\n");
-        Termalizacion(r, v,F, L, 100);
+        Termalizacion(r, v,F, L, 20);
 
         //Termalizo el sistema para llevarlo al equilibrio.
         printf("Sistema desordenado.\nTermalizando...\n");
@@ -348,9 +351,10 @@ void Simulacion(char *filename,char *filename2, char *filename3, double densi){
                 K =  Kinetic(v);
                 T=T0*K;
                 Difusion(NVueltas, r, filename2, i*dt, L);
-                RadialDistribution(r, L, filename3);
                 fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e/NPart, e*EnergiaPBC(r,L)/NPart, T*Temp, Pres*Presion(r, F, T, L, densi) );
             }
+            if(i%(1000*Medida)==0)
+                RadialDistribution(r, L, filename3);
             VVS(r, v, F, L, NVueltas);
             Bath(v, Termostato);
     }
@@ -370,7 +374,13 @@ int main(){
         sprintf(filename, "Thermodynamics/density = %lf.dat", densi);
         sprintf(filename2, "Difusion/density = %lf.dat", densi);
         sprintf(filename3,"Distribucion/density = %lf.dat", densi );
-        if(InicializarFicheroTermodinamica(filename, densi)==0)
+        FILE *f = fopen(filename2, "w");
+        if(f!=NULL)
+            fclose(f);
+        FILE *f2 = fopen(filename3, "w");
+        if(f2!=NULL)
+            fclose(f2);
+        if(InicializarFicheroTermodinamica(filename, densi)==0 )
             return 0;
         Simulacion(filename, filename2, filename3, densi);
         printf("He terminado la simulacion con densidad %lf.\n", densi);

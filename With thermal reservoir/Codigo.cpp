@@ -309,7 +309,7 @@ FILE *f = fopen(filename, "a");
 if(f!=NULL){
     for(int i=0; i<NPart-1; i++){
         for(int j=i+1; j<NPart; j++)
-            fprintf(f,"%lf\n", distancia(r[i][0]-r[j][0],r[i][1]-r[j][1], r[i][2]-r[j][2] ));
+            fprintf(f,"%lf\n", sigma*sqrt(distancia(r[i][0]-r[j][0],r[i][1]-r[j][1], r[i][2]-r[j][2] )));
     }
     fclose(f);
 }

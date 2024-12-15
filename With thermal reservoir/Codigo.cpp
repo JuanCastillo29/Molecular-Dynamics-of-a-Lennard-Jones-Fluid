@@ -20,10 +20,10 @@ unsigned char ind_ran,ig1,ig2,ig3;
 #define dt 0.001
 #define TTermalizacion 100
 #define NPart 128
-#define densi 0.4
 #define TMeasure 0.05
 
 double TTot = NMedidas*TMeasure;
+const double Densidad[4]={0.2, 0.4, 0.6, 0.8};
 
 int MedidasTotal=TTot/dt, Medida = TMeasure/dt, NTermalizacion = TTermalizacion/dt;
 
@@ -85,7 +85,7 @@ if(x<-L/2)
 return x;
 }
 
-double IniBCC(double (&r)[NPart][3], double (&v)[NPart][3]){
+double IniBCC(double (&r)[NPart][3], double (&v)[NPart][3], double densi){
     int N = int(pow((NPart/2)*1.0001, 1.0/3));
     double l = pow((NPart/2)/densi, 1.0/3), a = l/N;
     for(int i=0; i<NPart/2; i++){
@@ -107,12 +107,11 @@ return l;
 
 void GuardarConfi(double (&r)[NPart][3], int d){
 char filename[20];
-sprintf(filename, "Trayectoria/Configuration%d.xyz", d);
+sprintf(filename, "Difusion/Configuration%d.dat", d);
 FILE *f = fopen(filename, "wt");
 if(f!=NULL){
-    fprintf(f, "%d\n\n", NPart);
     for(int i =0; i<NPart;i++){
-        fprintf(f, "%d\t%lf\t %lf\t %lf\n", i, r[i][0], r[i][1], r[i][2]);
+        fprintf(f, "%lf\t %lf\t %lf\n", r[i][0], r[i][1], r[i][2]);
     }
     fclose(f);
 }
@@ -120,7 +119,7 @@ else
     printf("No se ha podido crear el fichero: %s", filename);
 }
 
-int InicializarFicheroTermodinamica(char *filename){
+int InicializarFicheroTermodinamica(char *filename, double densi){
     FILE *f = fopen(filename, "w");
     if(f!=NULL){
         fprintf(f, "Numero de particulas: %d. \n", NPart);
@@ -198,12 +197,22 @@ for(int i=0; i<NPart; i++){
 return K;
 }
 
-void VVS(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], double L){
+void VVS(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], double L, int (&NVueltas)[NPart][3]){
     //Nuevas posiciones.
     for(int n=0; n<NPart; n++){
         for(int l=0; l<3; l++){
             v[n][l] = v[n][l]+F[n][l]*dt/2;
-            r[n][l] = PBC(r[n][l] + v[n][l]*dt, L);
+
+            if(r[n][l]>L/2){
+                NVueltas[n][l]++;
+                r[n][l] = PBC(r[n][l] + v[n][l]*dt, L);
+            }
+            else{
+                if(r[n][l]<-L/2){
+                    NVueltas[n][l]-=1;
+                    r[n][l] = PBC(r[n][l] + v[n][l]*dt, L);
+                }
+            }
         }
     }
 
@@ -229,6 +238,28 @@ for(int i=0; i<NPart; i++){
 }
 
 
+void Difusion(int (&NVueltas)[NPart][3], double (&r)[NPart][3], char *filename, double tt, double L){
+FILE *fr = fopen("Difusion/Configuration0.dat", "r");
+if(fr != NULL){
+    FILE *fw = fopen(filename, "a");
+    if(fw !=NULL){
+        double x, y, z, MSD=0;
+        for(int i=0; i<NPart; i++){
+            fscanf(fr, "%lf \t %lf\t %lf\n", &x, &y, &z);
+            MSD += distancia(r[i][0]-x + L*NVueltas[i][0],r[i][1]-y + L*NVueltas[i][1],r[i][2]-z + + L*NVueltas[i][2]);
+        }
+        fprintf(fw, "%lf \t %lf \n", t*tt, MSD*sigma*sigma/NPart);
+        fclose(fw);
+    }
+    else
+        printf("No se ha podido abrir el fichero: %s.\n", filename);
+    fclose(fr);
+}
+else
+    printf("No se ha podido abrir el fichero: Difusion/Configuration0.dat");
+
+}
+
 
 void InicializarSistema(double (&r)[NPart][3], double (&v)[NPart][3], double L){
     double vmod = 10;
@@ -242,15 +273,16 @@ void InicializarSistema(double (&r)[NPart][3], double (&v)[NPart][3], double L){
 }
 
 void Termalizacion(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], double L, double T){
+int NVueltas[NPart][3];
 for(int i=0; i<NTermalizacion; i++){
-    VVS(r, v, F, L);
+    VVS(r, v, F, L, NVueltas);
     Bath(v, T);
 }
 }
 
 
 
-double Presion(double (&r)[NPart][3], double (&F)[NPart][3], double T, double L){
+double Presion(double (&r)[NPart][3], double (&F)[NPart][3], double T, double L, double densi){
 double P = 0;
 for(int i=0; i< NPart; i++){
     for(int j=0; j< 3; j++){
@@ -272,11 +304,12 @@ int Flag(double (&r)[NPart][3], double L){
     return 0;
 }
 
-void Simulacion(char *filename){
+void Simulacion(char *filename,char *filename2, double densi){
 
     FILE *fkin=fopen(filename, "a");
     if(fkin!=NULL ){
-        double K, T,F[NPart][3], G, r[NPart][3], v[NPart][3], L=IniBCC(r, v);
+        double K, T,F[NPart][3], G, r[NPart][3], v[NPart][3], L=IniBCC(r, v, densi), T0 = 2.0/(3*NPart-3);
+        int NVueltas[NPart][3];
 
         //Inicializo el valor de las fuerzas.
         Fuerza(F, r, L);
@@ -285,24 +318,26 @@ void Simulacion(char *filename){
         printf("Desordenando el sistema...\n");
         Termalizacion(r, v,F, L, 100);
 
-        if(Flag(r, L))
-            return;
-
         //Termalizo el sistema para llevarlo al equilibrio.
-        printf("Sistema desordenado.\n Termalizando...\n");
+        printf("Sistema desordenado.\nTermalizando...\n");
         Termalizacion(r, v, F, L, Termostato);
 
-        if(Flag(r, L))
-            return;
+        printf("Sistema termalizado.\nSimulando...\n");
+        GuardarConfi(r, 0);
 
-        printf("Sistema termalizado.\n Simulando...\n");
+        for(int i=0; i< NPart; i++){
+            for(int j=0; j<3; j++)
+                NVueltas[i][j]=0;
+        }
+
         for(int i=0; i<MedidasTotal ; i++){
             if(i%Medida==0){
                 K =  Kinetic(v);
-                T=2*K/(3*NPart-3);
-                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e/NPart, e*EnergiaPBC(r,L)/NPart, T*Temp, Pres*Presion(r, F, T, L) );
+                T=T0*K;
+                Difusion(NVueltas, r, filename2, i*dt, L);
+                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e/NPart, e*EnergiaPBC(r,L)/NPart, T*Temp, Pres*Presion(r, F, T, L, densi) );
             }
-            VVS(r, v, F, L);
+            VVS(r, v, F, L, NVueltas);
             Bath(v, Termostato);
     }
     fclose(fkin);
@@ -312,13 +347,18 @@ else
     printf("No se pudo abrir el fichero: %s.\n", filename);
 }
 
-
 int main(){
     ini_ran(time(NULL));
-    char filename[50];
-    sprintf(filename, "Thermodynamics/density = %lf.dat", densi);
-    if(InicializarFicheroTermodinamica(filename)==0)
-        return 0;
-    Simulacion(filename);
+    char filename[50], filename2[50];
+    double densi;
+    for(int i=0; i<5; i++){
+        densi = Densidad[i];
+        sprintf(filename, "Thermodynamics/density = %lf.dat", densi);
+         sprintf(filename2, "Difusion/density = %lf.dat", densi);
+        if(InicializarFicheroTermodinamica(filename, densi)==0)
+            return 0;
+        Simulacion(filename, filename2, densi);
+        printf("He terminado la simulacion con densidad %lf.\n", densi);
+    }
     return 0;
 }

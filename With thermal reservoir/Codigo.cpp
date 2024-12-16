@@ -15,7 +15,7 @@ unsigned char ind_ran,ig1,ig2,ig3;
 #define Gases 8.314462 //Constante de los gases en J/(K·mol)
 #define Avogradro 6.022140 //Constante de Avogradro.
 
-#define NMedidas 100//131072
+#define NMedidas 131072
 #define Termostato 10
 #define dt 0.001
 #define TTermalizacion 100
@@ -23,7 +23,7 @@ unsigned char ind_ran,ig1,ig2,ig3;
 #define TMeasure 0.05
 
 double TTot = NMedidas*TMeasure;
-const double Densidad[4]={0.2, 0.4, 0.6, 0.8};
+const double Densidad[1]={0.2};//, 0.4, 0.6, 0.8};
 
 int MedidasTotal=TTot/dt, Medida = TMeasure/dt, NTermalizacion = TTermalizacion/dt;
 
@@ -213,6 +213,7 @@ void VVS(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], do
             v[n][l] = v[n][l]+F[n][l]*dt/2;
             r[n][l] = PBC(r[n][l] + v[n][l]*dt, L, flag);
             NVueltas[n][l] += flag;
+            flag=0;
         }
     }
 
@@ -301,7 +302,6 @@ for(int i=0; i< NPart-1; i++){
         }
    }
 }
-printf("%lf\n", P*1.0/3/(L*L*L));
 return P*1.0/3/(L*L*L) + densi*T;
 }
 

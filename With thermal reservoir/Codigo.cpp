@@ -15,7 +15,7 @@ unsigned char ind_ran,ig1,ig2,ig3;
 #define Gases 8.314462 //Constante de los gases en J/(K·mol)
 #define Avogradro 6.022140 //Constante de Avogradro.
 
-#define NMedidas 131072
+#define NMedidas 100//131072
 #define Termostato 10
 #define dt 0.001
 #define TTermalizacion 100
@@ -77,15 +77,20 @@ double DistrGauss(void){
     return -sqrt(-2*log(d1))*cos(2*Pi*d2);
 }
 
-double PBC(double x, double L){
-if(x>L/2)
+double PBC(double x, double L, int &flag){
+if(x>L/2){
     x=x-L;
-if(x<-L/2)
+    flag = 1;
+}
+if(x<-L/2){
     x=x+L;
+    flag = -1;
+}
 return x;
 }
 
 double IniBCC(double (&r)[NPart][3], double (&v)[NPart][3], double densi){
+    int flag;
     int N = int(pow((NPart/2)*1.0001, 1.0/3));
     double l = pow((NPart/2)/densi, 1.0/3), a = l/N;
     for(int i=0; i<NPart/2; i++){
@@ -93,8 +98,8 @@ double IniBCC(double (&r)[NPart][3], double (&v)[NPart][3], double densi){
         r[i][1]=(i%(N*N))/N;
         r[i][0] = (i)%N;
         for(int j=0; j<3; j++){
-            r[i+NPart/2][j] = PBC(a*(r[i][j] + 0.5), l);
-            r[i][j] = PBC(a*r[i][j], l);
+            r[i+NPart/2][j] = PBC(a*(r[i][j] + 0.5), l, flag);
+            r[i][j] = PBC(a*r[i][j], l, flag);
         }
     }
     for(int i = 0; i<NPart; i++){
@@ -146,11 +151,12 @@ double distancia(double x, double y, double z){
 
 double EnergiaPBC(double (&r)[NPart][3], double L){
     double UPot=0, d, d6, d12, cutoff2 = 0.999*L*L/4, cutoff6 = cutoff2*cutoff2*cutoff2, Uoff = -4.0*(1.0/(cutoff6) - 1.0/(cutoff6*cutoff6)), x, y, z;
+    int flag;
     for(int i=0;i<NPart; i++){
         for(int j=i+1; j <NPart; j++){
-            x=PBC(r[j][0]-r[i][0], L);
-            y=PBC(r[j][1]-r[i][1], L);
-            z=PBC(r[j][2]-r[i][2], L);
+            x=PBC(r[j][0]-r[i][0], L, flag);
+            y=PBC(r[j][1]-r[i][1], L, flag);
+            z=PBC(r[j][2]-r[i][2], L, flag);
             d = distancia(x,y, z);
             if(d<cutoff2){
                 d6 = d*d*d;
@@ -163,6 +169,7 @@ double EnergiaPBC(double (&r)[NPart][3], double L){
 }
 
 void Fuerza(double (&F)[NPart][3],const double (&r)[NPart][3], double  L){
+int flag;
 double d2, d8, d14, R[3], cutoff2 = 0.999*L*L*1.0/4, module;
 for(int i=0; i<NPart; i++){
     for(int j=0; j<3; j++){
@@ -172,7 +179,7 @@ for(int i=0; i<NPart; i++){
 for(int i=0; i<NPart; i++){
     for(int j=i+1; j<NPart; j++){
         for(int l=0; l<3; l++){
-            R[l] = PBC(r[i][l]-r[j][l], L);
+            R[l] = PBC(r[i][l]-r[j][l], L, flag);
         }
         d2=distancia(R[0], R[1], R[2] );
         if(d2 < cutoff2){
@@ -198,24 +205,14 @@ return K;
 }
 
 void VVS(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], double L, int (&NVueltas)[NPart][3]){
+    int flag=0;
+
     //Nuevas posiciones.
     for(int n=0; n<NPart; n++){
         for(int l=0; l<3; l++){
             v[n][l] = v[n][l]+F[n][l]*dt/2;
-
-            if(r[n][l]>L/2){
-                NVueltas[n][l]++;
-                r[n][l] = PBC(r[n][l] + v[n][l]*dt, L);
-            }
-            else{
-                if(r[n][l]<-L/2){
-                    NVueltas[n][l]-=1;
-                    r[n][l] = PBC(r[n][l] + v[n][l]*dt, L);
-                }
-                else
-                    r[n][l] = PBC(r[n][l] + v[n][l]*dt, L);
-
-            }
+            r[n][l] = PBC(r[n][l] + v[n][l]*dt, L, flag);
+            NVueltas[n][l] += flag;
         }
     }
 
@@ -249,7 +246,7 @@ if(fr != NULL){
         double x, y, z, MSD=0;
         for(int i=0; i<NPart; i++){
             fscanf(fr, "%lf \t %lf\t %lf\n", &x, &y, &z);
-            MSD += distancia(r[i][0]-x + L*NVueltas[i][0],r[i][1]-y + L*NVueltas[i][1],r[i][2]-z + + L*NVueltas[i][2]);
+            MSD += distancia(r[i][0]-x + L*NVueltas[i][0],r[i][1]-y + L*NVueltas[i][1],r[i][2]-z + L*NVueltas[i][2]);
         }
         fprintf(fw, "%lf \t %lf \n", t*tt, MSD*sigma*sigma/NPart);
         fclose(fw);
@@ -285,13 +282,26 @@ for(int i=0; i<NTermalizacion; i++){
 
 
 
-double Presion(double (&r)[NPart][3], double (&F)[NPart][3], double T, double L, double densi){
-double P = 0;
-for(int i=0; i< NPart; i++){
-    for(int j=0; j< 3; j++){
-        P=P+r[i][j]*F[i][j];
-    }
+double Presion(double (&r)[NPart][3], double T, double L, double densi){
+double P = 0, R[3], dis, F, d14, d8;
+int flag;
+for(int i=0; i< NPart-1; i++){
+   for(int j=i+1; j<NPart; j++){
+        for(int d=0; d< 3; d++){
+            R[d] = PBC(r[i][d] - r[j][d], L, flag);
+        }
+        dis=distancia(R[0], R[1], R[2]);
+        if(dis < 0.999*L*L/4){
+            d8 = dis*dis*dis*dis;
+            d14 = d8*dis*dis*dis;
+            for(int d=0; d<3; d++){
+                F = 48.0/d14 - 24.0/d8;
+                P=P+R[d]*F*R[d];
+            }
+        }
+   }
 }
+printf("%lf\n", P*1.0/3/(L*L*L));
 return P*1.0/3/(L*L*L) + densi*T;
 }
 
@@ -351,7 +361,7 @@ void Simulacion(char *filename,char *filename2, char *filename3, double densi){
                 K =  Kinetic(v);
                 T=T0*K;
                 Difusion(NVueltas, r, filename2, i*dt, L);
-                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e/NPart, e*EnergiaPBC(r,L)/NPart, T*Temp, Pres*Presion(r, F, T, L, densi) );
+                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e/NPart, e*EnergiaPBC(r,L)/NPart, T*Temp, Pres*Presion(r, T, L, densi) );
             }
             if(i%(1000*Medida)==0)
                 RadialDistribution(r, L, filename3);
@@ -369,7 +379,7 @@ int main(){
     ini_ran(time(NULL));
     char filename[50], filename2[50], filename3[50];
     double densi;
-    for(int i=0; i<5; i++){
+    for(int i=0; i<sizeof(Densidad)/sizeof(const double); i++){
         densi = Densidad[i];
         sprintf(filename, "Thermodynamics/density = %lf.dat", densi);
         sprintf(filename2, "Difusion/density = %lf.dat", densi);

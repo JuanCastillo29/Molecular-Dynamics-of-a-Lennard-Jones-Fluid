@@ -15,15 +15,15 @@ unsigned char ind_ran,ig1,ig2,ig3;
 #define Gases 8.314462 //Constante de los gases en J/(K·mol)
 #define Avogradro 6.022140 //Constante de Avogradro.
 
-#define NMedidas 131072
-#define Termostato 10
+#define NMedidas 262144
+#define Termostato 2
 #define dt 0.001
 #define TTermalizacion 100
 #define NPart 128
 #define TMeasure 0.05
 
 double TTot = NMedidas*TMeasure;
-const double Densidad[1]={0.2};//, 0.4, 0.6, 0.8};
+const double Densidad[4]={0.2, 0.4, 0.6, 0.8};
 
 int MedidasTotal=TTot/dt, Medida = TMeasure/dt, NTermalizacion = TTermalizacion/dt;
 
@@ -34,7 +34,7 @@ int MedidasTotal=TTot/dt, Medida = TMeasure/dt, NTermalizacion = TTermalizacion/
 const double V = sigma*sigma*sigma; //Volumen en Amstrongs^3.
 const double t = sqrt(m/e)*sigma/10; //Tiempo en picosegundos
 const double Temp = 1000*e/Gases; //Temperatura en Kelvin
-const double Pres = 100000*e/Avogradro/V; // Presion en GPa
+const double Pres = 10000*e/Avogradro/V; // Presion en MPa
 const double rho = m/Avogradro/V*10; //Densidad en g/cm^3.
 
 //Generador de números de Parisi-Rapuano.

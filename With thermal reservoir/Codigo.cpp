@@ -16,14 +16,14 @@ unsigned char ind_ran,ig1,ig2,ig3;
 #define Avogradro 6.022140 //Constante de Avogradro.
 
 #define NMedidas 262144
-#define Termostato 2
+#define Termostato 10
 #define dt 0.001
 #define TTermalizacion 100
 #define NPart 128
 #define TMeasure 0.05
 
 double TTot = NMedidas*TMeasure;
-const double Densidad[4]={0.2, 0.4, 0.6, 0.8};
+const double Densidad[1]={0.2};//, 0.4, 0.6, 0.8};
 
 int MedidasTotal=TTot/dt, Medida = TMeasure/dt, NTermalizacion = TTermalizacion/dt;
 
@@ -133,7 +133,7 @@ int InicializarFicheroTermodinamica(char *filename, double densi){
         fprintf(f, "Tiempo de termalizacion: %lf ps.\n", TTermalizacion*t);
         fprintf(f, "Tiempo total de simulacion (en equilibrio): %lf ps.\n \n", TTot*t);
 
-        fprintf(f, "Tiempo [ps]\t E. Cinetica [kJ/mol]\t E. Potencial [kJ/mol]\t Temperatura [K]\t Presion [GPa]\n");
+        fprintf(f, "Tiempo [ps]\t E. Cinetica [kJ/mol]\t E. Potencial [kJ/mol]\t Temperatura [K]\t Presion [MPa]\n");
         fclose(f);
         return 1;
     }
@@ -168,9 +168,9 @@ double EnergiaPBC(double (&r)[NPart][3], double L){
     return UPot;
 }
 
-void Fuerza(double (&F)[NPart][3],const double (&r)[NPart][3], double  L){
+void Fuerza(double (&F)[NPart][3],const double (&r)[NPart][3], double  L, double &P){
 int flag;
-double d2, d8, d14, R[3], cutoff2 = 0.999*L*L*1.0/4, module;
+double d2, d8, d14, R[3], cutoff2 = 0.999*L*L*1.0/4, module, P0 = 1.0/3/(L*L*L);
 for(int i=0; i<NPart; i++){
     for(int j=0; j<3; j++){
         F[i][j]=0;
@@ -189,6 +189,7 @@ for(int i=0; i<NPart; i++){
             for(int n=0; n<3; n++){
                 F[i][n]=F[i][n] + module*R[n];
                 F[j][n] = F[j][n] - module*R[n];
+                P=P+module*R[n]*R[n]*P0;
             }
         }
     }
@@ -204,9 +205,9 @@ for(int i=0; i<NPart; i++){
 return K;
 }
 
-void VVS(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], double L, int (&NVueltas)[NPart][3]){
+void VVS(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], double L, int (&NVueltas)[NPart][3], double &P){
     int flag=0;
-
+    P = 0;
     //Nuevas posiciones.
     for(int n=0; n<NPart; n++){
         for(int l=0; l<3; l++){
@@ -217,7 +218,7 @@ void VVS(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], do
         }
     }
 
-    Fuerza(F, r, L);
+    Fuerza(F, r, L, P);
 
     //Nuevas velocidades
     for(int n=0; n<NPart; n++){
@@ -231,7 +232,7 @@ void Bath(double (&v)[NPart][3], double G){
 int n=0;
 for(int i=0; i<NPart; i++){
     for(int j=0; j<3; j++){
-        if(Random()<1){
+        if(Random()<0.2){
             v[i][j] = sqrt(G)*DistrGauss();
         }
     }
@@ -274,35 +275,12 @@ void InicializarSistema(double (&r)[NPart][3], double (&v)[NPart][3], double L){
 }
 
 void Termalizacion(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], double L, double T){
+double P = 0;
 int NVueltas[NPart][3];
 for(int i=0; i<NTermalizacion; i++){
-    VVS(r, v, F, L, NVueltas);
+    VVS(r, v, F, L, NVueltas, P);
     Bath(v, T);
 }
-}
-
-
-
-double Presion(double (&r)[NPart][3], double T, double L, double densi){
-double P = 0, R[3], dis, F, d14, d8;
-int flag;
-for(int i=0; i< NPart-1; i++){
-   for(int j=i+1; j<NPart; j++){
-        for(int d=0; d< 3; d++){
-            R[d] = PBC(r[i][d] - r[j][d], L, flag);
-        }
-        dis=distancia(R[0], R[1], R[2]);
-        if(dis < 0.999*L*L/4){
-            d8 = dis*dis*dis*dis;
-            d14 = d8*dis*dis*dis;
-            for(int d=0; d<3; d++){
-                F = 48.0/d14 - 24.0/d8;
-                P=P+R[d]*F*R[d];
-            }
-        }
-   }
-}
-return P*1.0/3/(L*L*L) + densi*T;
 }
 
 int Flag(double (&r)[NPart][3], double L){
@@ -334,11 +312,11 @@ void Simulacion(char *filename,char *filename2, char *filename3, double densi){
 
     FILE *fkin=fopen(filename, "a");
     if(fkin!=NULL ){
-        double K, T,F[NPart][3], G, r[NPart][3], v[NPart][3], L=IniBCC(r, v, densi), T0 = 2.0/(3*NPart-3);
+        double K, T,F[NPart][3], G, r[NPart][3], v[NPart][3], L=IniBCC(r, v, densi), T0 = 2.0/(3*NPart-3), P;
         int NVueltas[NPart][3];
 
         //Inicializo el valor de las fuerzas.
-        Fuerza(F, r, L);
+        Fuerza(F, r, L, P);
 
         //Desordeno el sistema para crear una configuracion liquida.
         printf("Desordenando el sistema...\n");
@@ -357,16 +335,18 @@ void Simulacion(char *filename,char *filename2, char *filename3, double densi){
         }
 
         for(int i=0; i<MedidasTotal ; i++){
+
+            if(i%(100*Medida)==0){
+                RadialDistribution(r, L, filename3);
+                Difusion(NVueltas, r, filename2, i*dt, L);
+            }
+            VVS(r, v, F, L, NVueltas, P);
+            Bath(v, Termostato);
             if(i%Medida==0){
                 K =  Kinetic(v);
                 T=T0*K;
-                Difusion(NVueltas, r, filename2, i*dt, L);
-                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e/NPart, e*EnergiaPBC(r,L)/NPart, T*Temp, Pres*Presion(r, T, L, densi) );
+                fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", t*i*dt, K*e/NPart, e*EnergiaPBC(r,L)/NPart, T*Temp, Pres*(P+T*densi) );
             }
-            if(i%(1000*Medida)==0)
-                RadialDistribution(r, L, filename3);
-            VVS(r, v, F, L, NVueltas);
-            Bath(v, Termostato);
     }
     fclose(fkin);
 }
@@ -378,9 +358,16 @@ else
 int main(){
     ini_ran(time(NULL));
     char filename[50], filename2[50], filename3[50];
-    double densi;
+    double densi, L, r[NPart][3], v[NPart][3], cutoff, cutoff2, cutoff4, cutoff8;
     for(int i=0; i<sizeof(Densidad)/sizeof(const double); i++){
         densi = Densidad[i];
+        L=IniBCC(r, v, densi);
+        cutoff = 0.999*L/2;
+        cutoff2=cutoff*cutoff;
+        cutoff4=cutoff2*cutoff2;
+        cutoff8=cutoff4*cutoff4;
+        printf("Error en energia con densidad %lf: %lf.\n", densi, e*8.0*Pi*densi*(1.0/(3*cutoff8*cutoff) - 1.0/(cutoff*cutoff2))/3);
+        printf("Error en presion con densidad %lf: %lf.\n", densi, Pres*16.0*Pi*densi*densi*(2.0/(3*cutoff8*cutoff) - 1.0/(cutoff*cutoff2))/3);
         sprintf(filename, "Thermodynamics/density = %lf.dat", densi);
         sprintf(filename2, "Difusion/density = %lf.dat", densi);
         sprintf(filename3,"Distribucion/density = %lf.dat", densi );
@@ -391,7 +378,7 @@ int main(){
         if(f2!=NULL)
             fclose(f2);
         if(InicializarFicheroTermodinamica(filename, densi)==0 )
-            return 0;
+           return 0;
         Simulacion(filename, filename2, filename3, densi);
         printf("He terminado la simulacion con densidad %lf.\n", densi);
     }

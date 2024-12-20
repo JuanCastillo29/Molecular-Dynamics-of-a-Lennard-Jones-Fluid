@@ -14,11 +14,11 @@ unsigned char ind_ran,ig1,ig2,ig3;
 #define Pi 3.14159265
 
 #define densi 0.8
-#define NPart 125
+#define NPart 128
 
-#define TTimeStep 10000000
-#define dt 0.00001
-#define TTermalizacion 100000
+#define TTimeStep 501
+#define dt 0.0001
+#define TTermalizacion 1000
 
 //Generador de números de Parisi-Rapuano.
 void ini_ran(int SEMILLA)
@@ -60,21 +60,19 @@ double DistrGauss(void){
     return -sqrt(-2*log(d1))*cos(2*Pi*d2);
 }
 
-
-double IniSC(double (&r)[NPart][3]){
-    int N = int(pow(NPart*1.0001, 1.0/3));
-    double l = pow(NPart/densi, 1.0/3), a=l/N;
-    for(int i=0; i<NPart; i++){
-        r[i][2]= (i/(N*N));
-        r[i][1]=(i%(N*N))/N;
-        r[i][0] = (i)%N;
-        for(int j=0; j<3; j++){
-            r[i][j] = a*r[i][j];
-        }
-    }
-return l;
+//Implement boundaring conditions by reducing the lenghts to a box between -L/2 and L/2.
+double PBC(double x, double L){
+if(x>L/2){
+    x=x-L;
+}
+if(x<-L/2){
+    x=x+L;
+}
+return x;
 }
 
+
+//Initialize the positions of the particles
 double IniBCC(double (&r)[NPart][3]){
     int N = int(pow((NPart/2)*1.0001, 1.0/3));
     double l = pow((NPart/2)/densi, 1.0/3), a = l/N;
@@ -83,58 +81,21 @@ double IniBCC(double (&r)[NPart][3]){
         r[i][1]=(i%(N*N))/N;
         r[i][0] = (i)%N;
         for(int j=0; j<3; j++){
-            r[i+NPart/2][j] = a*(r[i][j] + 0.5);
-            r[i][j] = a*r[i][j];
+            r[i+NPart/2][j] = PBC(a*(r[i][j] + 0.5), l);
+            r[i][j] = PBC(a*r[i][j], l);
         }
     }
 return l;
 }
 
-void GuardarConfi(double (&r)[NPart][3], int d){
-char filename[20];
-sprintf(filename, "Trayectoria/Configuration%d.xyz", d);
-FILE *f = fopen(filename, "wt");
-if(f!=NULL){
-    fprintf(f, "%d\n\n", NPart);
-    for(int i =0; i<NPart;i++){
-        fprintf(f, "%d\t%lf\t %lf\t %lf\n", i, r[i][0], r[i][1], r[i][2]);
-    }
-    fclose(f);
-}
-else
-    printf("No se ha podido crear el fichero: %s", filename);
-}
-
+//Computes the distance to a point.
 double distancia(double x, double y, double z){
     return x*x+y*y+z*z;
 }
 
-double Energia(double (&r)[NPart][3], double cutoff2){
-    double UPot=0, d, d6, d12, cutoff6 = cutoff2*cutoff2*cutoff2, Uoff = -4.0*(1.0/(cutoff6) - 1.0/(cutoff6*cutoff6));
-    for(int i=0;i<NPart; i++){
-        for(int j=i+1; j <NPart; j++){
-            d = distancia(r[j][0]-r[i][0],r[j][1]-r[i][1], r[j][2]-r[i][2] );
-            if(d<cutoff2){
-                d6 = d*d*d;
-                d12=d6*d6;
-                UPot=UPot-4.0*(1.0/d6 - 1.0/d12)-Uoff;
-            }
-        }
-
-    }
-    return UPot;
-}
-
-double PBC(double x, double L){
-if(x>L/2)
-    x=x-L;
-if(x<-L/2)
-    x=x+L;
-return x;
-}
-
+//Calcs potential energy with periodic boundary conditions.
 double EnergiaPBC(double (&r)[NPart][3], double L){
-    double UPot=0, d, d6, d12, cutoff2 = L*L/4, cutoff6 = cutoff2*cutoff2*cutoff2, Uoff = -4.0*(1.0/(cutoff6) - 1.0/(cutoff6*cutoff6)), x, y, z;
+    double UPot=0, d, d6, d12, cutoff2 = 0.999*L*L/4, cutoff6 = cutoff2*cutoff2*cutoff2, Uoff = -4.0*(1.0/(cutoff6) - 1.0/(cutoff6*cutoff6)), x, y, z;
     for(int i=0;i<NPart; i++){
         for(int j=i+1; j <NPart; j++){
             x=PBC(r[j][0]-r[i][0], L);
@@ -151,8 +112,9 @@ double EnergiaPBC(double (&r)[NPart][3], double L){
     return UPot;
 }
 
+//Function for force calculation.
 void Fuerza(double (&F)[NPart][3],const double (&r)[NPart][3], double  L){
-double d2, d8, d14, R[3], cutoff2 = L*L*1.0/4, module;
+double d2, d8, d14, R[3], cutoff2 = 0.999*L*L*1.0/4, module;
 for(int i=0; i<NPart; i++){
     for(int j=0; j<3; j++){
         F[i][j]=0;
@@ -177,8 +139,6 @@ for(int i=0; i<NPart; i++){
 }
 }
 
-
-
 double Kinetic(double (&v)[NPart][3]){
 double K = 0;
 for(int i=0; i<NPart; i++){
@@ -188,70 +148,16 @@ for(int i=0; i<NPart; i++){
 return K;
 }
 
-void CopyArray(double Conservar[NPart][3], double Borrar[NPart][3]){
-    for(int i=0; i<NPart; i++){
-        for(int j=0; j<3; j++){
-            Borrar[i][j] = Conservar[i][j];
-        }
-    }
-}
-
-void Euler(double (&r)[NPart][3], double (&v)[NPart][3], double L){
-FILE *fkin=fopen("Euler/Energia.txt", "wt");
-if(fkin!=NULL ){
-    double K, P, F[NPart][3];
-    for(int i=0; i<TTimeStep; i++){
-
-        GuardarConfi(r, i);
-        K=Kinetic(v);
-        P=Energia(r,L*L/4);
-        fprintf(fkin, "%lf\t%lf\t%lf\t%lf\n", i*dt,K, P, P+K );
-
+void Euler(double (&r)[NPart][3], double (&F)[NPart][3], double (&v)[NPart][3], double L){
         Fuerza(F, r, L);
-
         //Nuevas velocidades
         for(int n=0; n<NPart; n++){
             for(int l=0; l<3; l++){
-                r[n][l] = r[n][l] + v[n][l]*dt;
-                v[n][l] =v[n][l]+  (F[n][l])*dt;
+                r[n][l] = PBC(r[n][l] + v[n][l]*dt, L);
+                v[n][l] = v[n][l]+  (F[n][l])*dt;
             }
         }
     }
-}
-
-else{
-    printf("Remember that you have to create a directory called Euler.\n");
-}
-}
-
-void Verlet(double (&r)[NPart][3], double (&r0)[NPart][3], double L){
-FILE *fkin=fopen("Verlet/Energia.txt", "wt");
-if(fkin!=NULL ){
-    double K, P, v[NPart][3], aux[NPart][3], F[NPart][3];
-    for(int i=0; i<TTimeStep; i++){
-
-        CopyArray(r, aux);
-        GuardarConfi(r, i);
-        K=Kinetic(v);
-        P=Energia(r,L*L/4);
-        fprintf(fkin, "%lf\t%lf\t%lf\t%lf\n", i*dt,K, P, P+K );
-
-        Fuerza(F, r, L);
-        for(int n=0; n<NPart; n++){
-            for(int l=0; l<3; l++){
-                r[n][l] = PBC(2*aux[n][l] - r0[n][l] + F[n][l]*dt*dt, L);
-                v[n][l]=(r[n][l]-r0[n][l])/(2*dt);
-            }
-        }
-        CopyArray(aux, r0);
-
-    }
-}
-
-else{
-    printf("Remember that you have to create a directory called Verlet.\n");
-}
-}
 
 void VVS(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], double L){
     //Nuevas posiciones.
@@ -276,43 +182,22 @@ void Bath(double (&v)[NPart][3], double G){
 int n=0;
 for(int i=0; i<NPart; i++){
     for(int j=0; j<3; j++){
-        if(Random()<0.1){
+        if(Random()<0.5){
             v[i][j] = sqrt(G)*DistrGauss();
         }
     }
 }
 }
 
-void VerletVel(double (&r)[NPart][3], double (&v)[NPart][3], double L){
-FILE *fkin=fopen("Thermodynamics.txt", "wt");
-if(fkin!=NULL ){
-    double K, P, F[NPart][3], G;
-    Fuerza(F, r, L);
-    G=3;
-    for(int i=0; i<TTimeStep; i++){
-        GuardarConfi(r, i);
-        K=Kinetic(v);
-        P=EnergiaPBC(r,L);
-        fprintf(fkin, "%lf\t%lf\t%lf\t%lf\n", i*dt,K, P, 2*K/(3*NPart-3));
-        VVS(r, v, F, L);
-        //Bath(v, G);
-    }
-    fclose(fkin);
-}
-
-else{
-    printf("Remember that you have to create a directory called VerletVel.\n");
-}
-}
-
 void Termalizacion(double (&r)[NPart][3], double (&v)[NPart][3], double L){
-double F[NPart][3], G=100;
+double F[NPart][3], G=2;
 Fuerza(F, r, L);
+
 for(int i=0; i<TTermalizacion; i++){
     VVS(r, v, F, L);
     Bath(v, G);
+
 }
-GuardarConfi(r, 0);
 }
 
 void InicializarSistema( double (&v)[NPart][3]){
@@ -334,16 +219,6 @@ if(f!=NULL){
             fprintf(f, "%lf\n", v[i][j]);
     }
 }
-}
-
-double Presion(double (&r)[NPart][3], double (&F)[NPart][3], double T){
-double P = 0;
-for(int i=0; i< NPart; i++){
-    for(int j=0; j< 3; j++){
-        P=P+r[i][j]*F[i][j];
-    }
-}
-return P*1.0/3 + densi*T;
 }
 
 void Cinetica(char *filename, int i, const double (&v)[NPart][3], const double E){
@@ -369,44 +244,34 @@ else
 }
 
 void Simulacion(void){
-char directoryname[150], filename[50], filename2[50];
-sprintf(filename, "Verlet/dt=%lf", dt);
-sprintf(filename2, "Verlet/dt=%lf", dt);
-getcwd(directoryname, sizeof(directoryname));
-strcat(directoryname, "/");
-strcat(directoryname,filename);
-mkdir(directoryname);
-
+char  filename[50], filename2[50];
+sprintf(filename, "Euler/dt=%lf", dt);
+sprintf(filename2, "Euler/dt=%lf", dt);
 strcat(filename2, "/Kinetics.txt");
 strcat(filename,"/Thermodynamics.txt" );
 FILE *fkin=fopen(filename, "wt");
 if(fkin!=NULL ){
-    double K, P, T,F[NPart][3], G, r[NPart][3], v[NPart][3], L=IniSC(r);
+    double K, P, T,F[NPart][3], G, r[NPart][3], v[NPart][3] {}, L=IniBCC(r);
     Termalizacion(r, v, L);
-    sprintf(filename, "Verlet/dt=%lf/VelInicial.txt", dt);
+    sprintf(filename, "Euler/dt=%lf/VelInicial.txt", dt);
     InicializarSistema(v);
     guardarvel(filename, v);
     Fuerza(F, r, L);
-    //G=3;
     for(int i=0; i<TTimeStep; i++){
-        //GuardarConfi(r, i);
-        if(i%10000==0){
-            K=Kinetic(v);
-            P=EnergiaPBC(r,L);
-            T=2*K/(3*NPart-3);
-            fprintf(fkin, "%lf\t%lf\t%lf\t%lf\t%lf\n", i*dt,K, P, T, Presion(r, F, T) );
-            Cinetica(filename2, i, v, K+P);
-        }
-        VVS(r, v, F, L);
-        //Bath(v, G);
+        K=Kinetic(v);
+        P=EnergiaPBC(r,L);
+        T=2*K/(3*NPart-3);
+        fprintf(fkin, "%lf\t%lf\t%lf\t%lf\n", i*dt,K, P, T );
+        Cinetica(filename2, i, v, K+P);
+        VVS(r,F, v, L);
     }
-      sprintf(filename, "Verlet/dt=%lf/VelFinal.txt", dt);
+    sprintf(filename, "Euler/dt=%lf/VelFinal.txt", dt);
     guardarvel( filename, v);
     fclose(fkin);
 }
 
 else{
-    printf("Remember that you have to create a directory called VerletVel.\n");
+    printf("No se pudo abrir el archivo: %s.\n", filename);
     fclose(fkin);
 }
 }

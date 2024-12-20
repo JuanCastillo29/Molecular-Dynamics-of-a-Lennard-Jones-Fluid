@@ -23,7 +23,7 @@ unsigned char ind_ran,ig1,ig2,ig3;
 #define TMeasure 0.05
 
 double TTot = NMedidas*TMeasure;
-const double Densidad[1]={0.2};//, 0.4, 0.6, 0.8};
+const double Densidad[4]={0.2, 0.4, 0.6, 0.8};
 
 int MedidasTotal=TTot/dt, Medida = TMeasure/dt, NTermalizacion = TTermalizacion/dt;
 
@@ -262,18 +262,6 @@ else
 
 }
 
-
-void InicializarSistema(double (&r)[NPart][3], double (&v)[NPart][3], double L){
-    double vmod = 10;
-    for(int i=0; i< NPart; i++){
-        if(Random()<0.5)
-            vmod = -vmod;
-        for(int j=0; j<3; j++){
-            v[i][j]=vmod;
-        }
-    }
-}
-
 void Termalizacion(double (&r)[NPart][3], double (&v)[NPart][3], double (&F)[NPart][3], double L, double T){
 double P = 0;
 int NVueltas[NPart][3];
@@ -361,13 +349,6 @@ int main(){
     double densi, L, r[NPart][3], v[NPart][3], cutoff, cutoff2, cutoff4, cutoff8;
     for(int i=0; i<sizeof(Densidad)/sizeof(const double); i++){
         densi = Densidad[i];
-        L=IniBCC(r, v, densi);
-        cutoff = 0.999*L/2;
-        cutoff2=cutoff*cutoff;
-        cutoff4=cutoff2*cutoff2;
-        cutoff8=cutoff4*cutoff4;
-        printf("Error en energia con densidad %lf: %lf.\n", densi, e*8.0*Pi*densi*(1.0/(3*cutoff8*cutoff) - 1.0/(cutoff*cutoff2))/3);
-        printf("Error en presion con densidad %lf: %lf.\n", densi, Pres*16.0*Pi*densi*densi*(2.0/(3*cutoff8*cutoff) - 1.0/(cutoff*cutoff2))/3);
         sprintf(filename, "Thermodynamics/density = %lf.dat", densi);
         sprintf(filename2, "Difusion/density = %lf.dat", densi);
         sprintf(filename3,"Distribucion/density = %lf.dat", densi );

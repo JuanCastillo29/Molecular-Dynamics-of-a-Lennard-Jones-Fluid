@@ -5,12 +5,12 @@
 
 using namespace std;
 
-const int N[10] = { 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024}, NDatos = 131072, NLineas = 7, NColumnas = 5;
-char FicheroAnalisis[50] = {"Thermodynamics/density = 0.400000.dat"};
-char AnalisisPresion[50] = {"Analisis/Presion.dat"};
-char AnalisisCinetica[50] = {"Analisis/Cinetica.dat"};
-char AnalisisPotencial[50] = {"Analisis/Potencial.dat"};
-char AnalisisTemperatura[50] = {"Analisis/Temperatura.dat"};
+const int N[11] = { 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048}, NDatos = 16384, NLineas = 7, NColumnas = 5;
+char FicheroAnalisis[50] = {"Thermodynamics/density = 0.800000.dat"};
+char AnalisisPresion[50] = {"Analisis/Presion 0.8.dat"};
+char AnalisisCinetica[50] = {"Analisis/Cinetica 0.8.dat"};
+char AnalisisPotencial[50] = {"Analisis/Potencial 0.8.dat"};
+char AnalisisTemperatura[50] = {"Analisis/Temperatura 0.8.dat"};
 
 void Binding1(double *data, double &media, double &Varm, const char *X, int c){
     FILE *f = fopen(X, "r");
@@ -75,7 +75,8 @@ void Binding(char (&X)[50], char (&AnalisisX)[50], int c){
     if(f!=NULL){
         double data[NDatos], media=0, Varm = 0;
         Binding1(data, media, Varm, X, c);
-        fprintf(f, "La media es: %lf.\n", media);
+        printf("Hola.\n");
+        fprintf(f, "El valor promedio para los datos del fichero es: %lf.\n", media);
         fprintf(f, "%d\t %lf\n", 1, Varm);
         for(int n=0; n<sizeof(N)/sizeof(const int); n++){
             fprintf(f, "%d \t %lf\n", N[n], BindingN(data, NDatos/N[n], media));
@@ -87,6 +88,7 @@ void Binding(char (&X)[50], char (&AnalisisX)[50], int c){
 }
 
 int main(){
+    printf("Hola.\n");
     Binding(FicheroAnalisis, AnalisisCinetica, 2);
     Binding(FicheroAnalisis, AnalisisPotencial, 3);
     Binding(FicheroAnalisis, AnalisisTemperatura, 4);
